@@ -1,0 +1,28 @@
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+steps:
+  # Install Node.js dependencies
+  - name: 'gcr.io/cloud-builders/npm'
+    args: ['install']
+
+  # Build the project
+  - name: 'gcr.io/cloud-builders/npm'
+    args: ['run', 'build']
+    env:
+      - 'VITE_API_URL=${_VITE_API_URL}'  
+      - 'VITE_BROWSER_URL=${_VITE_BROWSER_URL}'
+      - 'VITE_MAPBOX_ACCESS_TOKEN=${_VITE_MAPBOX_ACCESS_TOKEN}'
+
+  # Deploy the application to App Engine
+  - name: 'gcr.io/cloud-builders/gcloud'
+    args:
+      - 'app'
+      - 'deploy'
+      - '--version'
+      - '$BUILD_ID'
+      - '--project'
+      - '$PROJECT_ID'
+      - '--quiet'
+
+timeout: '1200s'
