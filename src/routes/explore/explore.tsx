@@ -16,7 +16,7 @@ export default function Explore() {
         }
       );
       const data = await response.json();
-      console.log(data.items);
+
       setItems(data.items);
     }
 

@@ -66,8 +66,7 @@ export const columns = (
           if (!response.ok) {
             throw new Error(`HTTP error! Status: ${response.status}`);
           }
-          const result = await response.json();
-          console.log("Delete successful:", result);
+
           toast({
             title: "Delete Successful",
             description: "The item has been successfully deleted.",
