@@ -5,6 +5,7 @@ on:
     branches:
       - '**'
       - '!main'
+      - '!dev'
 
 jobs:
   update_branches:
