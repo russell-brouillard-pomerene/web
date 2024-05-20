@@ -13,12 +13,34 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { useNavigate, Link } from "react-router-dom";
-import { cn } from "@/lib/utils";
-import { buttonVariants } from "@/components/ui/button";
 import { useAuth } from "@/contexts/useAuth";
+import { FcGoogle } from "react-icons/fc";
+import { jwtDecode } from "jwt-decode";
+
+import { SuiClient, getFullnodeUrl } from "@mysten/sui.js/client";
+import {
+  SerializedSignature,
+  decodeSuiPrivateKey,
+} from "@mysten/sui.js/cryptography";
+import { Ed25519Keypair } from "@mysten/sui.js/keypairs/ed25519";
+import { TransactionBlock } from "@mysten/sui.js/transactions";
+import {
+  genAddressSeed,
+  generateNonce,
+  generateRandomness,
+  getExtendedEphemeralPublicKey,
+  getZkLoginSignature,
+  jwtToAddress,
+} from "@mysten/zklogin";
+
+const MAX_EPOCH = 2; // keep ephemeral keys active for this many Sui epochs from now (1 epoch ~= 24h)
+
+const suiClient = new SuiClient({
+  url: getFullnodeUrl("devnet"),
+});
 
 const formSchema = z
   .object({
@@ -37,14 +59,13 @@ export default function Signup() {
   const { toast } = useToast();
   const [submitting, setSubmitting] = useState(false);
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { login, googleSignIn, currentUser } = useAuth();
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       email: "",
       password: "",
-      passwordConfirm: "",
     },
   });
 
@@ -89,6 +110,136 @@ export default function Signup() {
     }
   }
 
+  async function handleGoogleSignIn() {
+    setSubmitting(true);
+    try {
+      console.log("TEST");
+      await googleSignIn();
+      console.log("TEST2");
+      console.log(currentUser);
+
+      await zkLogin();
+      // navigate("/items");
+    } catch (error) {
+      if (error instanceof Error) {
+        const errorMessage = error.message;
+        toast({
+          title: "Error signing in with Google",
+          description: errorMessage,
+        });
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function zkLogin() {
+    console.log("ZKLOGIN");
+    // const { epoch } = await suiClient.getLatestSuiSystemState();
+    // const maxEpoch = Number(epoch) + MAX_EPOCH;
+    // const ephemeralKeyPair = new Ed25519Keypair();
+    // const randomness = generateRandomness();
+
+    // const setupData = {
+    //   provider: "Google",
+    //   maxEpoch,
+    //   randomness: randomness.toString(),
+    //   ephemeralPrivateKey: ephemeralKeyPair.getSecretKey(),
+    // };
+
+    // if (!currentUser) {
+    //   return;
+    // }
+
+    // const jwtPayload = await currentUser.getIdTokenResult();
+    // console.log(jwtPayload);
+
+    // const jwt = await currentUser.getIdToken();
+    // console.log(jwt);
+
+    // if (!jwtPayload.claims.sub || !jwtPayload.claims.aud) return;
+
+    // if (!setupData) return;
+
+    const userSalt = BigInt(1234567890);
+
+    // grab the JWT from the URL fragment (the '#...')
+    const urlFragment = window.location.hash.substring(1);
+    const urlParams = new URLSearchParams(urlFragment);
+    const jwt = urlParams.get("id_token");
+    if (!jwt) {
+      return;
+    }
+
+    // remove the URL fragment
+    window.history.replaceState(null, "", window.location.pathname);
+
+    // decode the JWT
+    const jwtPayload = jwtDecode(jwt);
+    if (!jwtPayload.sub || !jwtPayload.aud) {
+      console.warn("[completeZkLogin] missing jwt.sub or jwt.aud");
+      return;
+    }
+
+    const userAddr = jwtToAddress(jwt, userSalt);
+
+    console.log("userAddr ", userAddr);
+
+    const setupData = JSON.parse(sessionStorage.getItem("setupDataKey")!);
+
+    const ephemeralKeyPair = keypairFromSecretKey(
+      setupData.ephemeralPrivateKey
+    );
+
+    const zkProofs = await fetch("https://prover-dev.mystenlabs.com/v1", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(
+        {
+          maxEpoch: setupData.maxEpoch,
+          jwtRandomness: setupData.randomness,
+          extendedEphemeralPublicKey: getExtendedEphemeralPublicKey(
+            ephemeralKeyPair.getPublicKey()
+          ),
+          jwt,
+          salt: userSalt.toString(),
+          keyClaimName: "sub",
+        },
+        null,
+        2
+      ),
+    }).then((res) => res.json());
+
+    console.log("zkLogin  ", zkLogin);
+
+    if (!zkProofs) return;
+
+    sessionStorage.setItem(
+      "zklogin-account",
+      JSON.stringify({
+        provider: setupData.provider,
+        userAddr,
+        zkProofs,
+        ephemeralPrivateKey: setupData.ephemeralPrivateKey,
+        userSalt: userSalt.toString(),
+        sub: jwtPayload.sub,
+        aud: jwtPayload.aud,
+        maxEpoch: setupData.maxEpoch,
+      })
+    );
+
+    // navigate("/items");
+  }
+
+  function keypairFromSecretKey(privateKeyBase64: string): Ed25519Keypair {
+    const keyPair = decodeSuiPrivateKey(privateKeyBase64);
+    return Ed25519Keypair.fromSecretKey(keyPair.secretKey);
+  }
+
+  useEffect(() => {
+    zkLogin();
+  }, []);
+
   return (
     <div className="w-100 h-screen">
       <div className="container relative h-full flex-col items-center justify-center md:grid lg:max-w-none lg:grid-cols-2 lg:px-0">
@@ -102,7 +253,7 @@ export default function Signup() {
             className="rounded-full h-10"
           />
         </Link>
-        <Link
+        {/* <Link
           to="/login"
           className={cn(
             buttonVariants({ variant: "ghost" }),
@@ -110,7 +261,7 @@ export default function Signup() {
           )}
         >
           Login
-        </Link>
+        </Link> */}
         <div className="relative hidden h-full flex-col bg-muted p-10 text-white lg:flex dark:border-r">
           <div className="absolute inset-0 bg-green-100" />
           <div className="relative z-20 flex items-center text-lg font-medium">
@@ -124,7 +275,9 @@ export default function Signup() {
           </div>
           <div className="relative z-20 mt-auto">
             <blockquote className="space-y-2">
-              <p className="text-lg text-black">A smart network for international trade</p>
+              <p className="text-lg text-black">
+                A smart network for international trade
+              </p>
             </blockquote>
           </div>
         </div>
@@ -132,11 +285,8 @@ export default function Signup() {
           <div className="mx-auto flex w-full flex-col justify-center space-y-6 sm:w-[350px]">
             <div className="flex flex-col space-y-2 text-center">
               <h1 className="text-2xl font-semibold tracking-tight">
-                Create an account
+                Sign in to your account
               </h1>
-              <p className="text-sm text-muted-foreground">
-                Enter your email below to create your account
-              </p>
             </div>
             <Form {...form}>
               <form
@@ -169,45 +319,49 @@ export default function Signup() {
                     </FormItem>
                   )}
                 />
-                <FormField
-                  control={form.control}
-                  name="passwordConfirm"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Password Confirm</FormLabel>
-                      <FormControl>
-                        <Input type="password" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <Button disabled={submitting} type="submit" className="w-full bg-green-600 hover:bg-green-700">
+                <Button
+                  disabled={submitting}
+                  type="submit"
+                  className="w-full bg-green-600 hover:bg-green-700"
+                >
                   {submitting ? (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   ) : null}
                   Submit
                 </Button>
+
+                <div className="relative">
+                  <div
+                    className="absolute inset-0 flex items-center"
+                    aria-hidden="true"
+                  >
+                    <div className="w-full border-t border-gray-300"></div>
+                  </div>
+                  <div className="relative flex justify-center">
+                    <span className="px-3 bg-white text-lg font-medium text-gray-900">
+                      Or continue with
+                    </span>
+                  </div>
+                </div>
+
+                <Button
+                  onClick={handleGoogleSignIn}
+                  disabled={submitting}
+                  className={`w-full border border-gray-300 flex items-center justify-center py-2 px-4 rounded-md shadow-sm transition-colors duration-200 ${
+                    submitting
+                      ? "bg-gray-600 hover:bg-gray-700 text-white"
+                      : "bg-white hover:bg-gray-100 text-gray-700"
+                  }`}
+                >
+                  {submitting ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <FcGoogle className="mr-2 h-5 w-5" />
+                  )}
+                  Google
+                </Button>
               </form>
             </Form>
-
-            <p className="px-8 text-center text-sm text-muted-foreground">
-              By clicking continue, you agree to our{" "}
-              <Link
-                to="/terms"
-                className="underline underline-offset-4 hover:text-primary"
-              >
-                Terms of Service
-              </Link>{" "}
-              and{" "}
-              <Link
-                to="/privacy"
-                className="underline underline-offset-4 hover:text-primary"
-              >
-                Privacy Policy
-              </Link>
-              .
-            </p>
           </div>
         </div>
       </div>
