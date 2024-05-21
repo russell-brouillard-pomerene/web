@@ -11,6 +11,7 @@ import { auth } from "@/firebase-config"; // Ensure this is correctly pointing t
 import { SuiClient, getFullnodeUrl } from "@mysten/sui.js/client";
 import { generateNonce, generateRandomness } from "@mysten/zklogin";
 import { Ed25519Keypair } from "@mysten/sui.js/keypairs/ed25519";
+import { jwtDecode } from "jwt-decode";
 
 const MAX_EPOCH = 2; // keep ephemeral keys active for this many Sui epochs from now (1 epoch ~= 24h)
 
@@ -28,7 +29,7 @@ interface AuthContextType {
   setCurrentUser: (user: User | null) => void;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
-  googleSignIn: () => Promise<void>;
+  googleSignIn: () => Promise<{ idToken: any; user: any }>;
   selectedScanner: ScannerInfo | null;
   setSelectedScanner: (scanner: ScannerInfo | null) => void;
   location: string;
@@ -74,14 +75,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     await signOut(auth);
   };
 
-  // const googleSignIn = async () => {
-  //   const provider = new GoogleAuthProvider();
-  //   await signInWithPopup(auth, provider);
-  // };
-
   const googleSignIn = async () => {
-    console.log("TEST");
-    // const provider = new GoogleAuthProvider();
+    const provider = new GoogleAuthProvider();
     const { epoch } = await suiClient.getLatestSuiSystemState();
     const maxEpoch = Number(epoch) + MAX_EPOCH; // the ephemeral key will be valid for MAX_EPOCH from now
     const ephemeralKeyPair = new Ed25519Keypair();
@@ -92,7 +87,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       randomness
     );
 
-    // Set the nonce in session storage to validate it later
     sessionStorage.setItem(
       "setupDataKey",
       JSON.stringify({
@@ -102,25 +96,86 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         ephemeralPrivateKey: ephemeralKeyPair.getSecretKey(),
       })
     );
+    // Debugging: Log the generated nonce
+    console.log("Generated nonce:", nonce);
 
-    const clientId = import.meta.env.VITE_FIREBASE_AUTH_GOOGLE_CLIENT_ID || "";
+    // Store nonce for later validation
+    sessionStorage.setItem("storedNonce", nonce);
 
-    // Construct the OAuth URL manually
-    const oauthUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
-    oauthUrl.searchParams.set("client_id", clientId);
-    oauthUrl.searchParams.set(
-      "redirect_uri",
-      `${window.location.origin}/signup`
-    );
-    oauthUrl.searchParams.set("response_type", "id_token");
-    oauthUrl.searchParams.set("scope", "openid");
-    oauthUrl.searchParams.set("nonce", nonce);
+    provider.setCustomParameters({ nonce });
 
-    console.log(oauthUrl);
+    // Ensure to get your Firebase auth instance
+    const result = await signInWithPopup(auth, provider);
 
-    // Redirect to the OAuth URL
-    window.location.replace(oauthUrl.toString());
+    // The signed-in user info
+    const user = result.user;
+
+    // This gives you a Google Access Token. You can use it to access the Google API.
+    const credential = GoogleAuthProvider.credentialFromResult(result);
+    const idToken = credential?.idToken;
+
+    // Decode JWT to validate nonce
+    const jwtPayload: any = jwtDecode(idToken!);
+    const decodedNonce = jwtPayload.nonce;
+
+    // Debugging: Log the decoded nonce and stored nonce
+    console.log("Decoded nonce:", decodedNonce);
+    const storedNonce = sessionStorage.getItem("storedNonce");
+    console.log("Stored nonce:", storedNonce);
+
+    if (decodedNonce !== storedNonce) {
+      console.log("Nonce does not match");
+      throw new Error("Nonce validation failed");
+    }
+
+    console.log("Google JWT:", jwtPayload);
+    console.log("Firebase User:", user);
+
+    return { idToken, user };
   };
+
+  // const googleSignIn = async () => {
+  //   console.log("TEST");
+
+  //   const { epoch } = await suiClient.getLatestSuiSystemState();
+  //   const maxEpoch = Number(epoch) + MAX_EPOCH; // the ephemeral key will be valid for MAX_EPOCH from now
+  //   const ephemeralKeyPair = new Ed25519Keypair();
+  //   const randomness = generateRandomness();
+  //   const nonce = generateNonce(
+  //     ephemeralKeyPair.getPublicKey(),
+  //     maxEpoch,
+  //     randomness
+  //   );
+
+  //   // Set the nonce in session storage to validate it later
+  //   sessionStorage.setItem(
+  //     "setupDataKey",
+  //     JSON.stringify({
+  //       provider: "Google",
+  //       maxEpoch,
+  //       randomness: randomness.toString(),
+  //       ephemeralPrivateKey: ephemeralKeyPair.getSecretKey(),
+  //     })
+  //   );
+
+  //   const clientId = import.meta.env.VITE_FIREBASE_AUTH_GOOGLE_CLIENT_ID || "";
+
+  //   // Construct the OAuth URL manually
+  //   const oauthUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
+  //   oauthUrl.searchParams.set("client_id", clientId);
+  //   oauthUrl.searchParams.set(
+  //     "redirect_uri",
+  //     `${window.location.origin}/signup`
+  //   );
+  //   oauthUrl.searchParams.set("response_type", "id_token");
+  //   oauthUrl.searchParams.set("scope", "openid");
+  //   oauthUrl.searchParams.set("nonce", nonce);
+
+  //   console.log(oauthUrl);
+
+  //   // Redirect to the OAuth URL
+  //   window.location.replace(oauthUrl.toString());
+  // };
 
   const handleSetSelectedScanner = (scanner: ScannerInfo | null) => {
     setSelectedScanner(scanner);

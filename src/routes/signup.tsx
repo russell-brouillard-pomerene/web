@@ -113,12 +113,9 @@ export default function Signup() {
   async function handleGoogleSignIn() {
     setSubmitting(true);
     try {
-      console.log("TEST");
-      await googleSignIn();
-      console.log("TEST2");
-      console.log(currentUser);
+      const { idToken } = await googleSignIn();
 
-      await zkLogin();
+      await zkLogin(idToken);
       // navigate("/items");
     } catch (error) {
       if (error instanceof Error) {
@@ -133,46 +130,8 @@ export default function Signup() {
     }
   }
 
-  async function zkLogin() {
-    console.log("ZKLOGIN");
-    // const { epoch } = await suiClient.getLatestSuiSystemState();
-    // const maxEpoch = Number(epoch) + MAX_EPOCH;
-    // const ephemeralKeyPair = new Ed25519Keypair();
-    // const randomness = generateRandomness();
-
-    // const setupData = {
-    //   provider: "Google",
-    //   maxEpoch,
-    //   randomness: randomness.toString(),
-    //   ephemeralPrivateKey: ephemeralKeyPair.getSecretKey(),
-    // };
-
-    // if (!currentUser) {
-    //   return;
-    // }
-
-    // const jwtPayload = await currentUser.getIdTokenResult();
-    // console.log(jwtPayload);
-
-    // const jwt = await currentUser.getIdToken();
-    // console.log(jwt);
-
-    // if (!jwtPayload.claims.sub || !jwtPayload.claims.aud) return;
-
-    // if (!setupData) return;
-
+  async function zkLogin(jwt: any) {
     const userSalt = BigInt(1234567890);
-
-    // grab the JWT from the URL fragment (the '#...')
-    const urlFragment = window.location.hash.substring(1);
-    const urlParams = new URLSearchParams(urlFragment);
-    const jwt = urlParams.get("id_token");
-    if (!jwt) {
-      return;
-    }
-
-    // remove the URL fragment
-    window.history.replaceState(null, "", window.location.pathname);
 
     // decode the JWT
     const jwtPayload = jwtDecode(jwt);
@@ -182,8 +141,6 @@ export default function Signup() {
     }
 
     const userAddr = jwtToAddress(jwt, userSalt);
-
-    console.log("userAddr ", userAddr);
 
     const setupData = JSON.parse(sessionStorage.getItem("setupDataKey")!);
 
@@ -208,9 +165,11 @@ export default function Signup() {
         null,
         2
       ),
-    }).then((res) => res.json());
-
-    console.log("zkLogin  ", zkLogin);
+    })
+      .then((res) => res.json())
+      .catch((e) => {
+        console.error(e);
+      });
 
     if (!zkProofs) return;
 
@@ -235,10 +194,6 @@ export default function Signup() {
     const keyPair = decodeSuiPrivateKey(privateKeyBase64);
     return Ed25519Keypair.fromSecretKey(keyPair.secretKey);
   }
-
-  useEffect(() => {
-    zkLogin();
-  }, []);
 
   return (
     <div className="w-100 h-screen">
