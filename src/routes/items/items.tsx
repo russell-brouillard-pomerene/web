@@ -26,10 +26,21 @@ import {
 import { useNavigate } from "react-router-dom";
 import { columns } from "./itemColumns";
 import { ItemType } from "@/types/itemTypes";
-
 import { useAuth } from "@/contexts/useAuth";
 import { useToast } from "@/components/ui/use-toast";
 import MapComponent from "@/components/MapComponent";
+import { SuiClient, getFullnodeUrl } from "@mysten/sui.js/client";
+import { genAddressSeed, getZkLoginSignature } from "@mysten/zklogin";
+import { TransactionBlock } from "@mysten/sui.js/transactions";
+import {
+  SerializedSignature,
+  decodeSuiPrivateKey,
+} from "@mysten/sui.js/cryptography";
+import { Ed25519Keypair } from "@mysten/sui.js/keypairs/ed25519";
+
+const suiClient = new SuiClient({
+  url: getFullnodeUrl("devnet"),
+});
 
 export default function Items() {
   const [sorting, setSorting] = useState<SortingState>([]);
@@ -40,6 +51,9 @@ export default function Items() {
   const { currentUser } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const [account] = useState(
+    JSON.parse(sessionStorage.getItem("zklogin-account") || "")
+  );
 
   useEffect(() => {
     const fetchItems = async () => {
@@ -48,24 +62,43 @@ export default function Items() {
           return;
         }
 
-        const jwt = await currentUser.getIdToken(); // Ensure currentUser is not null before calling this
+        console.log(account);
 
-        const resp = await fetch(`${import.meta.env.VITE_API_URL}/item/user`, {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${jwt}`,
-          },
+        // sendTransaction(account.userAddr);
+
+        // fetch("https://faucet.devnet.sui.io/v1/gas", {
+        //   method: "POST",
+        //   headers: { "Content-Type": "application/json" },
+        //   body: JSON.stringify({
+        //     FixedAmountRequest: {
+        //       recipient: account.userAddr,
+        //     },
+        //   }),
+        // });
+        const suiBalance = await suiClient.getBalance({
+          owner: account.userAddr,
+          coinType: "0x2::sui::SUI",
         });
 
-        if (!resp.ok) {
-          // Handle HTTP errors here, for example:
-          throw new Error(`Failed to fetch items: ${resp.statusText}`);
-        }
+        console.log(suiBalance);
+        // const jwt = await currentUser.getIdToken(); // Ensure currentUser is not null before calling this
 
-        const body = await resp.json();
+        // const resp = await fetch(`${import.meta.env.VITE_API_URL}/item/user`, {
+        //   method: "GET",
+        //   headers: {
+        //     "Content-Type": "application/json",
+        //     Authorization: `Bearer ${jwt}`,
+        //   },
+        // });
 
-        setItems(body.items);
+        // if (!resp.ok) {
+        //   // Handle HTTP errors here, for example:
+        //   throw new Error(`Failed to fetch items: ${resp.statusText}`);
+        // }
+
+        // const body = await resp.json();
+
+        // setItems(body.items);
       } catch (error) {
         console.error("An unexpected error occurred:", error);
       }
@@ -73,6 +106,68 @@ export default function Items() {
 
     fetchItems();
   }, [currentUser]);
+
+  async function sendTransaction(account: any) {
+    console.log("HERE!");
+    // Sign the transaction bytes with the ephemeral private key
+    const txb = new TransactionBlock();
+    txb.setSender(account.userAddr);
+
+    console.log();
+
+    const ephemeralKeyPair = keypairFromSecretKey(account.ephemeralPrivateKey);
+    const { bytes, signature: userSignature } = await txb.sign({
+      client: suiClient,
+      signer: ephemeralKeyPair,
+    });
+
+    // Generate an address seed by combining userSalt, sub (subject ID), and aud (audience)
+    const addressSeed = genAddressSeed(
+      BigInt(account.userSalt),
+      "sub",
+      account.sub,
+      account.aud
+    ).toString();
+
+    // Serialize the zkLogin signature by combining the ZK proof (inputs), the maxEpoch,
+    // and the ephemeral signature (userSignature)
+    const zkLoginSignature: SerializedSignature = getZkLoginSignature({
+      inputs: {
+        ...account.zkProofs,
+        addressSeed,
+      },
+      maxEpoch: account.maxEpoch,
+      userSignature,
+    });
+
+    // Execute the transaction
+    await suiClient
+      .executeTransactionBlock({
+        transactionBlock: bytes,
+        signature: zkLoginSignature,
+        options: {
+          showEffects: true,
+        },
+      })
+      .then((result) => {
+        console.debug(
+          "[sendTransaction] executeTransactionBlock response:",
+          result
+        );
+      })
+      .catch((error: unknown) => {
+        console.warn(
+          "[sendTransaction] executeTransactionBlock failed:",
+          error
+        );
+        return null;
+      });
+  }
+
+  function keypairFromSecretKey(privateKeyBase64: string): Ed25519Keypair {
+    const keyPair = decodeSuiPrivateKey(privateKeyBase64);
+    return Ed25519Keypair.fromSecretKey(keyPair.secretKey);
+  }
 
   function globalFilterFn(
     row: Row<ItemType>,

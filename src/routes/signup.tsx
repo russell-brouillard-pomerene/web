@@ -13,34 +13,15 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Loader2 } from "lucide-react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "@/contexts/useAuth";
 import { FcGoogle } from "react-icons/fc";
 import { jwtDecode } from "jwt-decode";
-
-import { SuiClient, getFullnodeUrl } from "@mysten/sui.js/client";
-import {
-  SerializedSignature,
-  decodeSuiPrivateKey,
-} from "@mysten/sui.js/cryptography";
+import { decodeSuiPrivateKey } from "@mysten/sui.js/cryptography";
 import { Ed25519Keypair } from "@mysten/sui.js/keypairs/ed25519";
-import { TransactionBlock } from "@mysten/sui.js/transactions";
-import {
-  genAddressSeed,
-  generateNonce,
-  generateRandomness,
-  getExtendedEphemeralPublicKey,
-  getZkLoginSignature,
-  jwtToAddress,
-} from "@mysten/zklogin";
-
-const MAX_EPOCH = 2; // keep ephemeral keys active for this many Sui epochs from now (1 epoch ~= 24h)
-
-const suiClient = new SuiClient({
-  url: getFullnodeUrl("devnet"),
-});
+import { getExtendedEphemeralPublicKey, jwtToAddress } from "@mysten/zklogin";
 
 const formSchema = z
   .object({
@@ -59,7 +40,7 @@ export default function Signup() {
   const { toast } = useToast();
   const [submitting, setSubmitting] = useState(false);
   const navigate = useNavigate();
-  const { login, googleSignIn, currentUser } = useAuth();
+  const { login, googleSignIn } = useAuth();
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -115,6 +96,10 @@ export default function Signup() {
     try {
       const { idToken } = await googleSignIn();
 
+      if (!idToken) {
+        throw Error("Cannot get Google Auth");
+      }
+
       await zkLogin(idToken);
       // navigate("/items");
     } catch (error) {
@@ -130,7 +115,7 @@ export default function Signup() {
     }
   }
 
-  async function zkLogin(jwt: any) {
+  async function zkLogin(jwt: string) {
     const userSalt = BigInt(1234567890);
 
     // decode the JWT
@@ -187,7 +172,7 @@ export default function Signup() {
       })
     );
 
-    // navigate("/items");
+    navigate("/items");
   }
 
   function keypairFromSecretKey(privateKeyBase64: string): Ed25519Keypair {
@@ -208,15 +193,6 @@ export default function Signup() {
             className="rounded-full h-10"
           />
         </Link>
-        {/* <Link
-          to="/login"
-          className={cn(
-            buttonVariants({ variant: "ghost" }),
-            "absolute right-4 top-4 md:right-8 md:top-8 hover:bg-green-50"
-          )}
-        >
-          Login
-        </Link> */}
         <div className="relative hidden h-full flex-col bg-muted p-10 text-white lg:flex dark:border-r">
           <div className="absolute inset-0 bg-green-100" />
           <div className="relative z-20 flex items-center text-lg font-medium">
