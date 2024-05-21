@@ -18,6 +18,7 @@ import { AuthProvider } from "./contexts/AuthProvider";
 import RequireAuth from "./routes/RequireAuth";
 import ItemInfo from "./routes/items/ItemInfo";
 import Explore from "./routes/explore/explore";
+import { SuiClientProvider } from "./contexts/SuiClientProvider";
 
 const router = createBrowserRouter([
   {
@@ -55,7 +56,7 @@ const router = createBrowserRouter([
         element: <CreateItem />,
       },
       { path: "items/:pubKey", element: <ItemInfo /> },
-      
+
       {
         path: "events/create",
         element: <CreateEvent />,
@@ -78,8 +79,10 @@ const router = createBrowserRouter([
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <AuthProvider>
-      <RouterProvider router={router} />
-    </AuthProvider>
+    <SuiClientProvider>
+      <AuthProvider>
+        <RouterProvider router={router} />
+      </AuthProvider>
+    </SuiClientProvider>
   </React.StrictMode>
 );

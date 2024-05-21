@@ -1,3 +1,4 @@
+import React, { useEffect, useState, useCallback } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -10,11 +11,12 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/useAuth";
-import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "./ui/use-toast";
 import { Loader2 } from "lucide-react";
 import { User } from "firebase/auth";
+import { useSuiClient } from "@/contexts/useSuiClient";
+import { CoinBalance } from "@mysten/sui.js/client";
 
 interface UserNavProps {
   user: User | null;
@@ -22,92 +24,62 @@ interface UserNavProps {
 
 export const UserNav: React.FC<UserNavProps> = ({ user }) => {
   const navigate = useNavigate();
+  const suiClient = useSuiClient();
   const { logout } = useAuth();
-  const [solanaBalance, setSolanaBalance] = useState<number>(0);
+  const [balance, setBalance] = useState<CoinBalance | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [account] = useState(() =>
+    JSON.parse(sessionStorage.getItem("zklogin-account") || "{}")
+  );
+
+  const getBalance = useCallback(async () => {
+    try {
+      const suiBalance = await suiClient.getBalance({
+        owner: account.userAddr,
+        coinType: "0x2::sui::SUI",
+      });
+      setBalance(suiBalance);
+    } catch (error) {
+      console.error("Error fetching SUI balance:", error);
+    }
+  }, [account.userAddr, suiClient]);
 
   useEffect(() => {
-    const fetchSolanaBalance = async () => {
-      try {
-        if (!user) {
-          return;
-        }
-        const jwt = await user.getIdToken();
-        // const response = await fetch(
-        //   `${import.meta.env.VITE_API_URL}/user/balance`,
-        //   {
-        //     method: "GET",
-        //     headers: {
-        //       "Content-Type": "application/json",
-        //       // Make sure you are sending the necessary authorization token
-        //       Authorization: `Bearer ${jwt}`,
-        //     },
-        //   }
-        // );
+    getBalance();
+  }, [getBalance]);
 
-        // if (!response.ok) {
-        //   // If the server response wasn't ok, throw an error
-        //   throw new Error("Failed to fetch Solana balance");
-        // }
-
-        // const data = await response.json();
-        // setSolanaBalance(data.balance);
-      } catch (error) {
-        console.error("Error fetching Solana balance:", error);
-        // Optionally, handle the error, e.g., by showing an error message or setting the balance to null
-      }
-    };
-
-    if (user) {
-      fetchSolanaBalance();
-    }
-  }, [user]);
-
-  async function logoutUser() {
+  const handleLogout = async () => {
     try {
-      logout();
+      await logout();
       navigate("/login");
     } catch (error) {
-      console.error("failed to logout", error);
+      console.error("Failed to logout", error);
     }
-  }
+  };
 
   const handleAirdrop = async () => {
     setSubmitting(true);
     try {
-      if (!user) {
-        return;
-      }
-      const jwt = await user.getIdToken(); // Adjust according to how you get the JWT
-      const res: Response = await fetch(
-        `${import.meta.env.VITE_API_URL}/user/airdrop`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${jwt}`,
+      await fetch("https://faucet.devnet.sui.io/v1/gas", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          FixedAmountRequest: {
+            recipient: account.userAddr,
           },
-        }
-      ).catch((error) => {
-        throw new Error(error);
+        }),
       });
 
-      if (!res.ok) {
-        toast({
-          title: "Airdrop Failed",
-          description: "Try again later",
-        });
-        return;
-      }
+      await getBalance();
 
-      if (res.ok) {
-        const sol = await res.json();
-        setSolanaBalance(sol.sol + solanaBalance);
-      }
-    } catch (error) {
-      console.error("Error during airdrop:", error);
       toast({
-        title: "Airdrop Failed",
+        title: "Success",
+        description: "10 credits",
+      });
+    } catch (error) {
+      console.error("Error getting credits", error);
+      toast({
+        title: "Error Getting Credits",
         description: "Try again later",
       });
     } finally {
@@ -136,21 +108,23 @@ export const UserNav: React.FC<UserNavProps> = ({ user }) => {
             </p>
           </div>
           <div className="flex items-center justify-between pt-2">
-            <Badge>Sol: {solanaBalance?.toFixed(2).toString()}</Badge>
+            <Badge>${(Number(balance?.totalBalance) / 1_000_000_000).toFixed(2)}</Badge>
             <Button
               variant="outline"
               className="ml-2 text-xs"
               onClick={handleAirdrop}
+              disabled={submitting}
             >
               {submitting ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : null}
-              Airdrop SOL
+              ) : (
+                "Get More Credits"
+              )}
             </Button>
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={logoutUser}>Log out</DropdownMenuItem>
+        <DropdownMenuItem onSelect={handleLogout}>Log out</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
