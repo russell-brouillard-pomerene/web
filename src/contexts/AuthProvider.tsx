@@ -6,15 +6,11 @@ import {
   signOut,
 } from "firebase/auth";
 import { auth } from "@/firebase-config"; // Ensure this is correctly pointing to your Firebase configuration
-import { SuiClient, getFullnodeUrl } from "@mysten/sui.js/client";
 import { generateNonce, generateRandomness } from "@mysten/zklogin";
 import { Ed25519Keypair } from "@mysten/sui.js/keypairs/ed25519";
+import { suiClient } from "./suiClient";
 
 const MAX_EPOCH = 2; // Keep ephemeral keys active for this many Sui epochs from now (1 epoch ~= 24h)
-
-const suiClient = new SuiClient({
-  url: getFullnodeUrl("devnet"),
-});
 
 export interface ScannerInfo {
   description: string;
@@ -64,6 +60,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   }, []);
 
   const login = async (email: string, password: string) => {
+    localStorage.removeItem("setupDataKey");
+    localStorage.removeItem("zklogin-account");
     await signInWithEmailAndPassword(auth, email, password);
   };
 

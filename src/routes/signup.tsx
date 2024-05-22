@@ -90,7 +90,9 @@ export default function Signup() {
   async function handleGoogleSignIn() {
     setSubmitting(true);
     try {
-      await googleSignIn();
+
+      console.log("TEST")
+      googleSignIn();
     } catch (error) {
       if (error instanceof Error) {
         const errorMessage = error.message;
@@ -110,9 +112,8 @@ export default function Signup() {
       if (hash.includes("id_token")) {
         const idToken = new URLSearchParams(hash.substring(1)).get("id_token");
 
-
-        console.log(idToken)
-        if (idToken) {
+        console.log(idToken);
+        if (idToken && localStorage.getItem("setupDataKey")) {
           const credential = GoogleAuthProvider.credential(idToken);
           await signInWithCredential(auth, credential);
           await zkLogin(idToken);
