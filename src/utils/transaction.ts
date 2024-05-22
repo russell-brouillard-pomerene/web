@@ -3,7 +3,6 @@ import { TransactionBlock } from "@mysten/sui.js/transactions";
 import { decodeSuiPrivateKey } from "@mysten/sui.js/cryptography";
 import { Ed25519Keypair } from "@mysten/sui.js/keypairs/ed25519";
 import { suiClient } from "@/contexts/suiClient";
-import { MIST_PER_SUI } from "@mysten/sui.js/utils";
 
 export async function createItem() {
   const account = JSON.parse(sessionStorage.getItem("zklogin-account") || "{}");
@@ -12,11 +11,14 @@ export async function createItem() {
 
   const txb = new TransactionBlock();
 
-  const [coin] = txb.splitCoins(txb.gas, [MIST_PER_SUI * 1n]);
-  txb.transferObjects(
-    [coin],
-    "0xfa0f8542f256e669694624aa3ee7bfbde5af54641646a3a05924cf9e329a8a36"
-  );
+  txb.moveCall({
+    target: `0xe45a03b19ae437f7855813e05a28ba68c4cf17076dad891d89084b03ed40c9ce::pomerene::register_pallet`,
+    arguments: [
+      txb.pure.string("pallet1"),
+      txb.pure.string("my location russell"),
+    ],
+  });
+
   txb.setSender(account.userAddr);
 
   console.log("Public Address:", account.userAddr);
@@ -59,6 +61,72 @@ export async function createItem() {
     console.log("Transaction Result:", result);
   } catch (error) {
     console.error("Transaction Execution Error:", error);
+  }
+}
+
+export async function getItems() {
+  try {
+    const accountData = sessionStorage.getItem("zklogin-account");
+    if (!accountData) {
+      console.error("No account data found in sessionStorage.");
+      return [];
+    }
+
+    const account = JSON.parse(accountData);
+    console.log("Account:", account);
+
+    if (!account.userAddr) {
+      console.error("User address is missing in the account data.");
+      return [];
+    }
+
+    const objectsResponse = await suiClient.getOwnedObjects({
+      owner: account.userAddr,
+    });
+    console.log("Objects:", JSON.stringify(objectsResponse));
+
+    if (!objectsResponse || !objectsResponse.data) {
+      console.error(
+        "No objects found or invalid response from getOwnedObjects."
+      );
+      return [];
+    }
+
+    const ids = objectsResponse.data
+      .map((object) => object.data?.objectId)
+      .filter((id) => id);
+    if (ids.length === 0) {
+      console.log("No object IDs found.");
+      return [];
+    }
+
+    const txns = await suiClient.multiGetObjects({
+      ids,
+      options: { showType: true, showContent: true },
+    });
+
+    const items = txns
+      .map((txn) => {
+        const fields = txn.data?.content?.fields;
+
+        if (!fields.location) {
+          return null;
+        }
+
+        return fields
+          ? {
+              objectId: fields.id.id,
+              description: fields.description,
+              location: fields.location,
+            }
+          : null;
+      })
+      .filter((item) => item !== null);
+
+    return items;
+  } catch (error) {
+    console.error("Error fetching items:", error);
+    return [];
   }
 }
 

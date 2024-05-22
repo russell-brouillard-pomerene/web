@@ -101,8 +101,6 @@ export default function Signup() {
           description: errorMessage,
         });
       }
-    } finally {
-      setSubmitting(false);
     }
   }
 
@@ -113,7 +111,7 @@ export default function Signup() {
         const idToken = new URLSearchParams(hash.substring(1)).get("id_token");
 
         console.log(idToken);
-        if (idToken && localStorage.getItem("setupDataKey")) {
+        if (idToken) {
           const credential = GoogleAuthProvider.credential(idToken);
           await signInWithCredential(auth, credential);
           await zkLogin(idToken);

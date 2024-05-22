@@ -29,16 +29,14 @@ import { ItemType } from "@/types/itemTypes";
 import { useAuth } from "@/contexts/useAuth";
 import { useToast } from "@/components/ui/use-toast";
 import MapComponent from "@/components/MapComponent";
-
-
-
+import { getItems } from "@/utils/transaction";
 
 export default function Items() {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
   const [rowSelection, setRowSelection] = useState({});
-  const [items] = useState<ItemType[]>([]);
+  const [items, setItems] = useState<ItemType[]>([]);
   const { currentUser } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -49,26 +47,11 @@ export default function Items() {
   useEffect(() => {
     const fetchItems = async () => {
       try {
-        
+        const items = await getItems();
 
-        // const jwt = await currentUser.getIdToken(); // Ensure currentUser is not null before calling this
+        console.log(items);
 
-        // const resp = await fetch(`${import.meta.env.VITE_API_URL}/item/user`, {
-        //   method: "GET",
-        //   headers: {
-        //     "Content-Type": "application/json",
-        //     Authorization: `Bearer ${jwt}`,
-        //   },
-        // });
-
-        // if (!resp.ok) {
-        //   // Handle HTTP errors here, for example:
-        //   throw new Error(`Failed to fetch items: ${resp.statusText}`);
-        // }
-
-        // const body = await resp.json();
-
-        // setItems(body.items);
+        setItems(items);
       } catch (error) {
         console.error("An unexpected error occurred:", error);
       }
@@ -76,8 +59,6 @@ export default function Items() {
 
     fetchItems();
   }, [currentUser]);
-
- 
 
   function globalFilterFn(
     row: Row<ItemType>,
@@ -89,7 +70,7 @@ export default function Items() {
 
     const lowercasedFilterValue = filterValue.toLowerCase();
     // Determine if the row should be included based on your filter criteria
-    const matchesPublic = row.original.public
+    const matchesPublic = row.original.objectId
       .toLowerCase()
       .includes(lowercasedFilterValue);
     const matchesDescription = row.original.description
