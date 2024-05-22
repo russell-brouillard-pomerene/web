@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "@/contexts/useAuth";
@@ -22,6 +22,8 @@ import { jwtDecode } from "jwt-decode";
 import { decodeSuiPrivateKey } from "@mysten/sui.js/cryptography";
 import { Ed25519Keypair } from "@mysten/sui.js/keypairs/ed25519";
 import { getExtendedEphemeralPublicKey, jwtToAddress } from "@mysten/zklogin";
+import { GoogleAuthProvider, signInWithCredential } from "firebase/auth";
+import { auth } from "@/firebase-config";
 
 const formSchema = z.object({
   email: z.string().email(),
@@ -88,16 +90,7 @@ export default function Signup() {
   async function handleGoogleSignIn() {
     setSubmitting(true);
     try {
-      const { idToken, credential } = await googleSignIn();
-
-      console.log(credential);
-
-      if (!idToken) {
-        throw Error("Cannot get Google Auth");
-      }
-
-      await zkLogin(idToken);
-      // navigate("/items");
+      await googleSignIn();
     } catch (error) {
       if (error instanceof Error) {
         const errorMessage = error.message;
@@ -110,6 +103,26 @@ export default function Signup() {
       setSubmitting(false);
     }
   }
+
+  useEffect(() => {
+    const handleRedirect = async () => {
+      const hash = window.location.hash;
+      if (hash.includes("id_token")) {
+        const idToken = new URLSearchParams(hash.substring(1)).get("id_token");
+
+
+        console.log(idToken)
+        if (idToken) {
+          const credential = GoogleAuthProvider.credential(idToken);
+          await signInWithCredential(auth, credential);
+          await zkLogin(idToken);
+          // Navigate to a protected route or home page after successful sign-in
+        }
+      }
+    };
+
+    handleRedirect();
+  }, []);
 
   async function zkLogin(jwt: string) {
     const res = {

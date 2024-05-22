@@ -7,6 +7,8 @@ import {
   signInWithPopup,
   GoogleAuthProvider,
   UserCredential,
+  signInWithCustomToken,
+  signInWithCredential,
 } from "firebase/auth";
 import { auth } from "@/firebase-config"; // Ensure this is correctly pointing to your Firebase configuration
 import { SuiClient, getFullnodeUrl } from "@mysten/sui.js/client";
@@ -29,7 +31,11 @@ interface AuthContextType {
   setCurrentUser: (user: User | null) => void;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
-  googleSignIn: () => Promise<{ idToken: string | null; user: User, credential:any }>;
+  // googleSignIn: () => Promise<{
+  //   idToken: string | null;
+  //   user: User;
+  //   credential: any;
+  // }>;
   selectedScanner: ScannerInfo | null;
   setSelectedScanner: (scanner: ScannerInfo | null) => void;
   location: string;
@@ -75,35 +81,45 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   };
 
   const googleSignIn = async () => {
-    const provider = new GoogleAuthProvider();
-    const { epoch } = await suiClient.getLatestSuiSystemState();
-    const maxEpoch = Number(epoch) + MAX_EPOCH;
-    const ephemeralKeyPair = new Ed25519Keypair();
-    const randomness = generateRandomness();
-    const nonce = generateNonce(
-      ephemeralKeyPair.getPublicKey(),
-      maxEpoch,
-      randomness
-    );
-
-    sessionStorage.setItem(
-      "setupDataKey",
-      JSON.stringify({
+    try {
+      const { epoch } = await suiClient.getLatestSuiSystemState();
+      const maxEpoch = Number(epoch) + MAX_EPOCH;
+      const ephemeralKeyPair = new Ed25519Keypair();
+      const randomness = generateRandomness();
+      const nonce = generateNonce(
+        ephemeralKeyPair.getPublicKey(),
         maxEpoch,
-        randomness: randomness.toString(),
-        ephemeralPrivateKey: ephemeralKeyPair.getSecretKey(),
-      })
-    );
+        randomness
+      );
 
-    provider.setCustomParameters({ nonce });
+      const clientId =
+        "844147711427-tc63nlmppukb8jqop92jdvrbf3ubcdkg.apps.googleusercontent.com";
+      const redirectUri = "http://localhost:5173/signup"; // Should be the URL of your app
+      const scope = "openid email profile";
+      const responseType = "id_token";
 
-    const result: UserCredential = await signInWithPopup(auth, provider);
-    const credential = GoogleAuthProvider.credentialFromResult(result);
+      const authorizationUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(
+        redirectUri
+      )}&response_type=${responseType}&scope=${encodeURIComponent(
+        scope
+      )}&nonce=${nonce}`;
 
-    console.log(credential);
-    const idToken = credential?.idToken ?? null;
+      sessionStorage.setItem(
+        "setupDataKey",
+        JSON.stringify({
+          maxEpoch,
+          randomness: randomness.toString(),
+          ephemeralPrivateKey: ephemeralKeyPair.getSecretKey(),
+        })
+      );
 
-    return { idToken, user: result.user, credential };
+      console.log("Authorization URL:", authorizationUrl);
+
+      // Redirect to the authorization URL
+      window.location.href = authorizationUrl;
+    } catch (error) {
+      console.error("Error during Google sign-in:", error);
+    }
   };
 
   const handleSetSelectedScanner = (scanner: ScannerInfo | null) => {
