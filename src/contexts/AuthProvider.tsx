@@ -29,7 +29,7 @@ interface AuthContextType {
   setCurrentUser: (user: User | null) => void;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
-  googleSignIn: () => Promise<{ idToken: string | null; user: User }>;
+  googleSignIn: () => Promise<{ idToken: string | null; user: User, credential:any }>;
   selectedScanner: ScannerInfo | null;
   setSelectedScanner: (scanner: ScannerInfo | null) => void;
   location: string;
@@ -89,7 +89,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     sessionStorage.setItem(
       "setupDataKey",
       JSON.stringify({
-        provider: "Google",
         maxEpoch,
         randomness: randomness.toString(),
         ephemeralPrivateKey: ephemeralKeyPair.getSecretKey(),
@@ -100,9 +99,11 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
     const result: UserCredential = await signInWithPopup(auth, provider);
     const credential = GoogleAuthProvider.credentialFromResult(result);
+
+    console.log(credential);
     const idToken = credential?.idToken ?? null;
 
-    return { idToken, user: result.user };
+    return { idToken, user: result.user, credential };
   };
 
   const handleSetSelectedScanner = (scanner: ScannerInfo | null) => {

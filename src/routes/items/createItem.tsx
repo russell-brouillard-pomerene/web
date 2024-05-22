@@ -27,7 +27,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { useAuth } from "@/contexts/useAuth";
+import { createItem } from "@/utils/transaction";
 
 const formSchema = z.object({
   description: z.string(),
@@ -39,7 +39,6 @@ export default function CreateItem() {
   const [open, setOpen] = useState(false);
   const [itemSecret, setItemSecret] = useState("");
   const navigate = useNavigate();
-  const { currentUser } = useAuth();
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -51,45 +50,18 @@ export default function CreateItem() {
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setSubmitting(true);
     try {
-      if (!currentUser) {
-        return;
-      }
+      console.log(values);
+      await createItem();
 
-      const jwt = await currentUser.getIdToken();
-
-      const resp = await fetch(`${import.meta.env.VITE_API_URL}/item/create`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${jwt}`,
-        },
-        body: JSON.stringify({
-          description: values.description,
-        }),
-      });
-
-      if (!resp.ok) {
-        if (resp.status === 403) {
-          // Redirect the user to the login page with a redirect back to the current page after login
-          navigate(`/login?redirect=${encodeURIComponent(location.pathname)}`);
-        } else {
-          toast({
-            title: "Error creating item (check if you have enough SOL in your wallet)",
-            description: "An error occurred while creating your item",
-          });
-        }
-        return;
-      }
-
-      const respBody = await resp.json();
-
-      setItemSecret(respBody.item.itemSecret);
+      setItemSecret("working");
       setOpen(true);
     } catch (error) {
       if (error instanceof Error) {
         const errorMessage = error.message;
+
+        console.log(errorMessage);
         toast({
-          title: "Error creating item (check if you have enough SOL in your wallet)",
+          title: "Error creating item",
           description: errorMessage,
         });
       }

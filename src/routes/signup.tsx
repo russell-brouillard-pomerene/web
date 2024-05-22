@@ -23,18 +23,12 @@ import { decodeSuiPrivateKey } from "@mysten/sui.js/cryptography";
 import { Ed25519Keypair } from "@mysten/sui.js/keypairs/ed25519";
 import { getExtendedEphemeralPublicKey, jwtToAddress } from "@mysten/zklogin";
 
-const formSchema = z
-  .object({
-    email: z.string().email(),
-    password: z.string().min(8, {
-      message: "Password must be at least 8 characters long",
-    }),
-    passwordConfirm: z.string().min(8),
-  })
-  .refine((data) => data.password === data.passwordConfirm, {
-    message: "Passwords don't match",
-    path: ["passwordConfirm"],
-  });
+const formSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(8, {
+    message: "Password must be at least 8 characters long",
+  }),
+});
 
 export default function Signup() {
   const { toast } = useToast();
@@ -94,7 +88,9 @@ export default function Signup() {
   async function handleGoogleSignIn() {
     setSubmitting(true);
     try {
-      const { idToken } = await googleSignIn();
+      const { idToken, credential } = await googleSignIn();
+
+      console.log(credential);
 
       if (!idToken) {
         throw Error("Cannot get Google Auth");
@@ -116,16 +112,21 @@ export default function Signup() {
   }
 
   async function zkLogin(jwt: string) {
-    const userSalt = BigInt(1234567890);
+    const res = {
+      salt: "1234567890",
+    };
+    const userSalt = BigInt(res.salt);
 
     // decode the JWT
     const jwtPayload = jwtDecode(jwt);
+
+    console.log(jwtPayload);
     if (!jwtPayload.sub || !jwtPayload.aud) {
       console.warn("[completeZkLogin] missing jwt.sub or jwt.aud");
       return;
     }
 
-    const userAddr = jwtToAddress(jwt, userSalt);
+    const userAddr = jwtToAddress(jwt, res.salt);
 
     const setupData = JSON.parse(sessionStorage.getItem("setupDataKey")!);
 
@@ -133,37 +134,42 @@ export default function Signup() {
       setupData.ephemeralPrivateKey
     );
 
-    const zkProofs = await fetch("https://prover-dev.mystenlabs.com/v1", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(
-        {
-          maxEpoch: setupData.maxEpoch,
-          jwtRandomness: setupData.randomness,
-          extendedEphemeralPublicKey: getExtendedEphemeralPublicKey(
-            ephemeralKeyPair.getPublicKey()
-          ),
-          jwt,
-          salt: userSalt.toString(),
-          keyClaimName: "sub",
-        },
-        null,
-        2
-      ),
-    })
+    const partialZkLoginSignature = await fetch(
+      "https://prover-dev.mystenlabs.com/v1",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          {
+            maxEpoch: setupData.maxEpoch,
+            jwtRandomness: setupData.randomness,
+            extendedEphemeralPublicKey: getExtendedEphemeralPublicKey(
+              ephemeralKeyPair.getPublicKey()
+            ),
+            jwt,
+            salt: userSalt.toString(),
+            keyClaimName: "sub",
+          },
+          null,
+          2
+        ),
+      }
+    )
       .then((res) => res.json())
       .catch((e) => {
         console.error(e);
       });
 
-    if (!zkProofs) return;
+    if (!partialZkLoginSignature) {
+      return;
+    }
 
     sessionStorage.setItem(
       "zklogin-account",
       JSON.stringify({
         provider: setupData.provider,
         userAddr,
-        zkProofs,
+        partialZkLoginSignature,
         ephemeralPrivateKey: setupData.ephemeralPrivateKey,
         userSalt: userSalt.toString(),
         sub: jwtPayload.sub,
