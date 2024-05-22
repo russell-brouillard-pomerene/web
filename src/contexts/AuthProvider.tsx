@@ -4,11 +4,6 @@ import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
   signOut,
-  signInWithPopup,
-  GoogleAuthProvider,
-  UserCredential,
-  signInWithCustomToken,
-  signInWithCredential,
 } from "firebase/auth";
 import { auth } from "@/firebase-config"; // Ensure this is correctly pointing to your Firebase configuration
 import { SuiClient, getFullnodeUrl } from "@mysten/sui.js/client";
@@ -31,11 +26,7 @@ interface AuthContextType {
   setCurrentUser: (user: User | null) => void;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
-  // googleSignIn: () => Promise<{
-  //   idToken: string | null;
-  //   user: User;
-  //   credential: any;
-  // }>;
+  googleSignIn: () => void;
   selectedScanner: ScannerInfo | null;
   setSelectedScanner: (scanner: ScannerInfo | null) => void;
   location: string;

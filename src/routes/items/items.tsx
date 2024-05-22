@@ -38,13 +38,13 @@ export default function Items() {
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
   const [rowSelection, setRowSelection] = useState({});
-  const [items, setItems] = useState<ItemType[]>([]);
+  const [items] = useState<ItemType[]>([]);
   const { currentUser } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [account] = useState(
-    JSON.parse(sessionStorage.getItem("zklogin-account") || "")
-  );
+  // const [account] = useState(
+  //   JSON.parse(sessionStorage.getItem("zklogin-account") || "")
+  // );
 
   useEffect(() => {
     const fetchItems = async () => {

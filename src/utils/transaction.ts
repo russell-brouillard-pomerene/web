@@ -1,9 +1,6 @@
 import { genAddressSeed, getZkLoginSignature } from "@mysten/zklogin";
 import { TransactionBlock } from "@mysten/sui.js/transactions";
-import {
-  SerializedSignature,
-  decodeSuiPrivateKey,
-} from "@mysten/sui.js/cryptography";
+import { decodeSuiPrivateKey } from "@mysten/sui.js/cryptography";
 import { Ed25519Keypair } from "@mysten/sui.js/keypairs/ed25519";
 import { suiClient } from "@/contexts/suiClient";
 import { MIST_PER_SUI } from "@mysten/sui.js/utils";
