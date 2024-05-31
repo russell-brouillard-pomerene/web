@@ -27,7 +27,6 @@ import { useNavigate } from "react-router-dom";
 import { columns } from "./itemColumns";
 import { ItemType } from "@/types/itemTypes";
 import { useAuth } from "@/contexts/useAuth";
-import { useToast } from "@/components/ui/use-toast";
 import MapComponent from "@/components/MapComponent";
 import { getItems } from "@/utils/transaction";
 
@@ -39,18 +38,17 @@ export default function Items() {
   const [items, setItems] = useState<ItemType[]>([]);
   const { currentUser } = useAuth();
   const navigate = useNavigate();
-  const { toast } = useToast();
-  // const [account] = useState(
-  //   JSON.parse(sessionStorage.getItem("zklogin-account") || "")
-  // );
 
   useEffect(() => {
     const fetchItems = async () => {
       try {
         const items = await getItems();
 
-        console.log(items);
+        console.log("front end", items);
 
+        if (!items) {
+          throw Error();
+        }
         setItems(items);
       } catch (error) {
         console.error("An unexpected error occurred:", error);
@@ -85,7 +83,7 @@ export default function Items() {
 
   const table = useReactTable({
     data: items,
-    columns: columns(toast, navigate, currentUser),
+    columns: columns(),
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     globalFilterFn,

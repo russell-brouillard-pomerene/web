@@ -3,21 +3,32 @@ import { TransactionBlock } from "@mysten/sui.js/transactions";
 import { decodeSuiPrivateKey } from "@mysten/sui.js/cryptography";
 import { Ed25519Keypair } from "@mysten/sui.js/keypairs/ed25519";
 import { suiClient } from "@/contexts/suiClient";
+import { ItemType } from "@/types/itemTypes";
 
-export async function createItem() {
-  const account = JSON.parse(sessionStorage.getItem("zklogin-account") || "{}");
+interface Account {
+  userAddr: string;
+  ephemeralPrivateKey: string;
+  userSalt: string;
+  sub: string;
+  aud: string;
+  partialZkLoginSignature: any;
+  maxEpoch: number;
+}
 
-  console.log("Account:", account);
+function getAccountData(): Account | null {
+  const accountData = sessionStorage.getItem("zklogin-account");
+  if (!accountData) {
+    console.error("No account data found in sessionStorage.");
+    return null;
+  }
+  return JSON.parse(accountData);
+}
 
-  const txb = new TransactionBlock();
-
-  txb.moveCall({
-    target: `0xe45a03b19ae437f7855813e05a28ba68c4cf17076dad891d89084b03ed40c9ce::pomerene::register_pallet`,
-    arguments: [
-      txb.pure.string("pallet1"),
-      txb.pure.string("my location russell"),
-    ],
-  });
+async function createTransaction(txb: TransactionBlock) {
+  const account = getAccountData();
+  if (!account) {
+    return;
+  }
 
   txb.setSender(account.userAddr);
 
@@ -30,7 +41,6 @@ export async function createItem() {
     signer: ephemeralKeyPair,
   });
 
-  // Generate addressSeed using userSalt, sub, and aud (JWT Payload)
   const addressSeed = genAddressSeed(
     BigInt(account.userSalt),
     "sub",
@@ -40,7 +50,6 @@ export async function createItem() {
 
   console.log("Address Seed:", addressSeed);
 
-  // Generate zkLoginSignature
   const zkLoginSignature = getZkLoginSignature({
     inputs: {
       ...account.partialZkLoginSignature,
@@ -52,33 +61,55 @@ export async function createItem() {
 
   console.log("ZK Login Signature:", zkLoginSignature);
 
-  // Execute transaction
   try {
     const result = await suiClient.executeTransactionBlock({
       transactionBlock: bytes,
       signature: zkLoginSignature,
     });
     console.log("Transaction Result:", result);
-  } catch (error) {
+  } catch (error: any) {
     console.error("Transaction Execution Error:", error);
+
+    throw Error(error);
   }
 }
 
-export async function getItems() {
+export async function createItem(
+  description: string,
+  location: string,
+  data: string
+) {
+  const txb = new TransactionBlock();
+  txb.moveCall({
+    target:
+      "0x79c524b2a67b08bbfade1f4c80b6c26b43aa7040584a5e518094d3b671028d7b::pomerene::register_pallet",
+    arguments: [
+      txb.pure.string(description),
+      txb.pure.string(location),
+      txb.pure.string(data),
+    ],
+  });
+
+  await createTransaction(txb);
+}
+
+export async function createScanner(description: string, location: string) {
+  const txb = new TransactionBlock();
+  txb.moveCall({
+    target:
+      "0x79c524b2a67b08bbfade1f4c80b6c26b43aa7040584a5e518094d3b671028d7b::pomerene::register_scanner",
+    arguments: [txb.pure.string(description), txb.pure.string(location)],
+  });
+
+  await createTransaction(txb);
+}
+
+export async function getItems(): Promise<ItemType[] | null[]> {
   try {
-    const accountData = sessionStorage.getItem("zklogin-account");
-    if (!accountData) {
-      console.error("No account data found in sessionStorage.");
-      return [];
-    }
+    const account = getAccountData();
+    if (!account || !account.userAddr) return [];
 
-    const account = JSON.parse(accountData);
     console.log("Account:", account);
-
-    if (!account.userAddr) {
-      console.error("User address is missing in the account data.");
-      return [];
-    }
 
     const objectsResponse = await suiClient.getOwnedObjects({
       owner: account.userAddr,
@@ -92,13 +123,15 @@ export async function getItems() {
       return [];
     }
 
-    const ids = objectsResponse.data
+    const ids: string[] = objectsResponse.data
       .map((object) => object.data?.objectId)
       .filter((id) => id);
-    if (ids.length === 0) {
+    if (ids && ids.length === 0) {
       console.log("No object IDs found.");
       return [];
     }
+
+    console.log("IDS ", ids);
 
     const txns = await suiClient.multiGetObjects({
       ids,
@@ -106,28 +139,44 @@ export async function getItems() {
     });
 
     const items = txns
-      .map((txn) => {
-        const fields = txn.data?.content?.fields;
-
-        if (!fields.location) {
+      .map((txn: any) => {
+        if (txn.data?.content) {
+          const content: any = txn.data?.content;
+          console.log(content);
+          return {
+            objectId: content.fields.id.id,
+            description: content.fields.description,
+            location: content.fields.location,
+          };
+        } else {
           return null;
         }
-
-        return fields
-          ? {
-              objectId: fields.id.id,
-              description: fields.description,
-              location: fields.location,
-            }
-          : null;
       })
       .filter((item) => item !== null);
+
+    console.log("items ", items);
 
     return items;
   } catch (error) {
     console.error("Error fetching items:", error);
     return [];
   }
+}
+
+export async function getObject(id: string) {
+  const obj = await suiClient.getObject({
+    id:"0x213503d4836ab8cae56f07920039422a06d73396bec79437af2abd71cada79dd",
+  });
+
+  return obj;
+}
+
+export async function getObjectTranactions(id:string) {
+  const transaction = await suiClient.queryTransactionBlocks({
+    
+  });
+
+  return transaction;
 }
 
 function keypairFromSecretKey(privateKeyBase64: string): Ed25519Keypair {

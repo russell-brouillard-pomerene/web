@@ -24,10 +24,11 @@ import {
 } from "@/components/ui/table";
 import { useParams } from "react-router-dom";
 import { columns } from "./itemColumnsTx";
-import { TransactionData } from "@/types/itemTypes";
 import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/contexts/useAuth";
 import MapComponentHistory from "@/components/MapComponentHistory";
+import { getObject, getObjectTranactions } from "@/utils/transaction";
+import { SuiObjectResponse } from "@mysten/sui.js/client";
 
 export default function ItemInfo() {
   const params = useParams();
@@ -35,7 +36,7 @@ export default function ItemInfo() {
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
   const [rowSelection, setRowSelection] = useState({});
-  const [items, setItems] = useState<TransactionData[]>([]);
+  const [items, setItems] = useState([]);
   const { currentUser } = useAuth();
   const [progress, setProgress] = useState(13);
   const [loadingData, setLoadingData] = useState(true);
@@ -48,23 +49,22 @@ export default function ItemInfo() {
 
   useEffect(() => {
     const fetchDataAndAddMarkers = async () => {
-      if (!currentUser) return;
       try {
-        const jwt = await currentUser.getIdToken();
-        const response = await fetch(
-          `${import.meta.env.VITE_API_URL}/event/${params.pubKey}`,
-          {
-            method: "GET",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${jwt}`,
-            },
-          }
-        );
-        const responseData = await response.json();
+        if (!params.pubKey) {
+          return;
+        }
 
-        setData(responseData);
-        setItems(responseData);
+        console.log(params.pubKey);
+
+        const responseData = await getObject(params.pubKey);
+
+        const test = await getObjectTranactions();
+
+        console.log("test ", test);
+
+        console.log(responseData);
+        // setData(responseData);
+        // setItems(responseData);
         setLoadingData(false);
       } catch (error) {
         console.error("Failed to fetch event items:", error);

@@ -26,43 +26,41 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Textarea } from "@/components/ui/textarea";
 import { createItem } from "@/utils/transaction";
+import MapPicker from "@/components/MapPicker";
 
 const formSchema = z.object({
-  description: z.string(),
+  description: z.string().min(1, "Description is required"),
+  location: z.string().min(1, "Location is required"),
+  data: z.string().min(1, "JSON data is required"),
 });
 
 export default function CreateItem() {
   const { toast } = useToast();
   const [submitting, setSubmitting] = useState(false);
   const [open, setOpen] = useState(false);
-  const [itemSecret, setItemSecret] = useState("");
   const navigate = useNavigate();
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       description: "",
+      location: "",
+      data: "",
     },
   });
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setSubmitting(true);
     try {
-      console.log(values);
-      await createItem();
+      await createItem(values.description, values.location, values.data);
 
-      setItemSecret("working");
       setOpen(true);
     } catch (error) {
       if (error instanceof Error) {
-        const errorMessage = error.message;
-
-        console.log(errorMessage);
         toast({
           title: "Error creating item",
-          description: errorMessage,
+          description: error.message,
         });
       }
     } finally {
@@ -75,22 +73,21 @@ export default function CreateItem() {
     navigate("/items");
   }
 
+  const handleLocationSelect = (location: string) => {
+    form.setValue("location", location);
+  };
+
   return (
     <>
       <div className="lg:p-8 p-4 pt-10">
-        <AlertDialog open={open}>
+        <AlertDialog open={open} onOpenChange={setOpen}>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Item secret</AlertDialogTitle>
-              <AlertDialogDescription>
-                Save your item secret key
-              </AlertDialogDescription>
-              <Textarea className="pt-8 py-4" defaultValue={itemSecret} />
+              <AlertDialogTitle>Created Item</AlertDialogTitle>
+              <AlertDialogDescription>Success</AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogAction onClick={handleClose}>
-                I've saved my secret key
-              </AlertDialogAction>
+              <AlertDialogAction onClick={handleClose}>OK</AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
@@ -115,6 +112,36 @@ export default function CreateItem() {
                   </FormItem>
                 )}
               />
+
+              <FormField
+                control={form.control}
+                name="location"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Location (GPS)</FormLabel>
+                    <FormControl>
+                      <Input {...field} readOnly />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="data"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>JSON Data</FormLabel>
+                    <FormControl>
+                      <Input {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <MapPicker onLocationSelect={handleLocationSelect} />
 
               <Button disabled={submitting} type="submit" className="w-full">
                 {submitting ? (

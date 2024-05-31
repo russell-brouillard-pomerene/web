@@ -104,6 +104,9 @@ export const UserNav: React.FC<UserNavProps> = ({ user }) => {
               {user?.email || "User"}
             </p>
             <p className="text-xs leading-none text-muted-foreground break-words whitespace-normal">
+              {account?.userAddr}
+            </p>
+            <p className="text-xs leading-none text-muted-foreground break-words whitespace-normal">
               {user?.displayName}
             </p>
           </div>
